@@ -2,7 +2,9 @@ package main
 
 import (
 	"log"
+	"net/http"
 	"os"
+	"telegramassist/internal/api"
 	"telegramassist/internal/application"
 	"telegramassist/internal/infrastructure/mysql"
 	"time"
@@ -109,5 +111,21 @@ func main() {
 	})
 
 	log.Println("Bot iniciado...")
+
+	// Inicializar el manejador de alertas
+	alertHandler := api.NewAlertHandler(esp32Service, b)
+
+	// Configurar el servidor HTTP
+	http.HandleFunc("/api/alerts", alertHandler.HandleAlert)
+
+	// Iniciar el servidor HTTP en una goroutine
+	go func() {
+		log.Println("Iniciando servidor HTTP en :8080...")
+		if err := http.ListenAndServe(":8080", nil); err != nil {
+			log.Fatalf("Error al iniciar el servidor HTTP: %v", err)
+		}
+	}()
+
+	// Iniciar el bot
 	b.Start()
 }

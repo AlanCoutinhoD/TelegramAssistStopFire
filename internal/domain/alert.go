@@ -1,6 +1,6 @@
 package domain
 
-// Alert representa una alerta recibida de un sensor
+
 type Alert struct {
 	NumeroSerie        string `json:"numeroSerie"`
 	Sensor             string `json:"sensor"`

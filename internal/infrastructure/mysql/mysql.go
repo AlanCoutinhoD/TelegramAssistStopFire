@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"telegramassist/internal/domain"
+	
+	"strconv" 
 
 	_ "github.com/go-sql-driver/mysql"
 )
@@ -34,11 +36,11 @@ func NewMySQLRepository() (*MySQLRepository, error) {
 	return &MySQLRepository{db: db}, nil
 }
 
-// Update the GetBySerial method
+
 func (r *MySQLRepository) GetBySerial(serial string) (*domain.ESP32, error) {
 	esp := &domain.ESP32{}
 	err := r.db.QueryRow("SELECT idESP32, numero_serie FROM ESP32 WHERE numero_serie = ?", serial).
-		Scan(&esp.ID, &esp.Serial) // Changed NumeroSerie to Serial to match your domain model
+		Scan(&esp.ID, &esp.Serial) 
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -80,7 +82,7 @@ func (r *MySQLRepository) GetESP32SerialByChat(chatID int64) (string, error) {
 	return serial, err
 }
 
-// Añadir después de GetESP32SerialByChat
+
 // Add debugging to the GetChatsByESP32Serial method
 func (r *MySQLRepository) GetChatsByESP32Serial(serial string) ([]int64, error) {
     fmt.Printf("Querying chats for ESP32 with serial: %s\n", serial)
@@ -146,4 +148,68 @@ func (r *MySQLRepository) GetUserByESP32Serial(serial string) (*domain.User, err
 	}
 	
 	return user, nil
+}
+
+// Implement KY026Manager interface
+func (r *MySQLRepository) GetLastReading(serial string) (*domain.KY026Reading, error) {
+    reading := &domain.KY026Reading{}
+    err := r.db.QueryRow(`
+        SELECT idKY_026, numero_serie, fecha_activacion, estado 
+        FROM KY_026 
+        WHERE numero_serie = ? 
+        ORDER BY idKY_026 DESC 
+        LIMIT 1`, serial).
+        Scan(&reading.ID, &reading.ESP32Serial, &reading.FechaActivacion, &reading.Estado)
+    if err == sql.ErrNoRows {
+        return nil, nil
+    }
+    return reading, err
+}
+
+func (r *MySQLRepository) SaveReading(reading *domain.KY026Reading) error {
+    _, err := r.db.Exec(
+        "INSERT INTO KY_026 (numero_serie, fecha_activacion, estado) VALUES (?, ?, ?)",
+        reading.ESP32Serial, reading.FechaActivacion, reading.Estado)
+    return err
+}
+
+func (r *MySQLRepository) ProcessAlert(alert *domain.Alert) error {
+    if alert.Sensor != "KY_026" {
+        return nil
+    }
+    reading := &domain.KY026Reading{
+        ESP32Serial:     alert.NumeroSerie,
+        FechaActivacion: alert.FechaActivacion,
+        Estado:          strconv.Itoa(alert.Estado),
+    }
+    return r.SaveReading(reading)
+}
+
+// Add these methods to implement NotificationManager interface
+func (r *MySQLRepository) NotifyUsers(chatIDs []int64, alert *domain.Alert) error {
+    // Implement notification logic here
+    return nil
+}
+
+func (r *MySQLRepository) GetLinkedChats(serial string) ([]int64, error) {
+    return r.GetChatsByESP32Serial(serial)
+}
+
+// Add this method to implement DeviceManager interface
+func (r *MySQLRepository) GetDevice(serial string) (*domain.ESP32, error) {
+    return r.GetBySerial(serial)
+}
+
+// Add these methods to implement missing interfaces
+func (r *MySQLRepository) LinkDeviceToChat(chatID int64, serial string) error {
+    return r.LinkChatToESP32(chatID, serial)
+}
+
+func (r *MySQLRepository) GetNotificationPreferences(userID int) (domain.NotificationPreferences, error) {
+    // Default preferences for now
+    return domain.NotificationPreferences{
+        EnableTelegram: true,
+        EnableEmail:    false,
+        EnableSMS:      false,
+    }, nil
 }
